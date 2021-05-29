@@ -22,11 +22,32 @@ type Connector struct {
 
 	Client *http.Client
 
+	Build   string
 	Version string
 
-	UserID int
-	Cookie *http.Cookie
-	Token  string
+	PersonID int
+	Cookie   *http.Cookie
+	Token    string
+}
+
+type InfoResult struct {
+	Build   string `json:"build"`
+	Version string `json:"version"`
+}
+
+type LoginData struct {
+	Status   string `json:"status"`
+	Message  string `json:"message"`
+	PersonID int    `json:"personId"`
+	Location string `json:"location"`
+}
+
+type LoginResult struct {
+	Data LoginData `json:"data"`
+}
+
+type LoginTokenResult struct {
+	Data string `json:"data"`
 }
 
 func New(hostname, username, password string) (*Connector, error) {
@@ -53,7 +74,16 @@ func New(hostname, username, password string) (*Connector, error) {
 		},
 	}
 
-	// TODO get version
+	result, err := conn.Get("info", false)
+	if err != nil {
+		return nil, err
+	}
+	var info InfoResult
+	if err := json.Unmarshal(result, &info); err != nil {
+		return nil, err
+	}
+	conn.Build = info.Build
+	conn.Version = info.Version
 
 	data := struct {
 		Username string `json:"username"`
@@ -62,18 +92,26 @@ func New(hostname, username, password string) (*Connector, error) {
 		username,
 		password,
 	}
-
-	result, err := conn.Post("login", data)
+	result, err = conn.Post("login", data)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("LOGIN: " + string(result))
+	var login LoginResult
+	if err := json.Unmarshal(result, &login); err != nil {
+		return nil, err
+	}
+	conn.PersonID = login.PersonID
 
-	token, err := conn.Get("persons/348/logintoken", true)
+	endpoint := fmt.Sprintf("persons/%d/logintoken", conn.PersonID)
+	result, err = conn.Get(endpoint, true)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("TOKEN: " + string(token))
+	var token LoginTokenResult
+	if err := json.Unmarshal(result, &token); err != nil {
+		return nil, err
+	}
+	conn.Token = token.Data
 
 	return conn, nil
 }
@@ -114,7 +152,7 @@ func (conn *Connector) Post(endpoint string, data interface{}) ([]byte, error) {
 	}
 	request.Header.Set("Content-type", "application/json")
 
-	if conn.Token != "" {
+	if endpoint != "login" && conn.Token != "" {
 		request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
 	}
 
