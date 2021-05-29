@@ -100,7 +100,7 @@ func New(hostname, username, password string) (*Connector, error) {
 	if err := json.Unmarshal(result, &login); err != nil {
 		return nil, err
 	}
-	conn.PersonID = login.PersonID
+	conn.PersonID = login.Data.PersonID
 
 	endpoint := fmt.Sprintf("persons/%d/logintoken", conn.PersonID)
 	result, err = conn.Get(endpoint, true)
