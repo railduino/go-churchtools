@@ -30,6 +30,11 @@ type Connector struct {
 	Token    string
 }
 
+type MetaPerson struct {
+	ID   int    `json:"id"`
+	Name string `json:"-"`
+}
+
 type InfoResult struct {
 	Build   string `json:"build"`
 	Version string `json:"version"`
@@ -51,12 +56,15 @@ type LoginTokenResult struct {
 }
 
 func New(hostname, username, password string) (*Connector, error) {
+	fmt.Printf("CT NEW 5\n")
+
 	conn := &Connector{
 		Hostname: hostname,
 		Username: username,
 		Password: password,
 	}
 
+	// Setup the HTTPS client
 	rootCAPool := x509.NewCertPool()
 	rootCA, err := ioutil.ReadFile(ROOT_CA_FILE)
 	if err != nil {
@@ -74,6 +82,7 @@ func New(hostname, username, password string) (*Connector, error) {
 		},
 	}
 
+	// Check connectivity to the ChurchTools host
 	result, err := conn.Get("info", false)
 	if err != nil {
 		return nil, err
@@ -85,6 +94,7 @@ func New(hostname, username, password string) (*Connector, error) {
 	conn.Build = info.Build
 	conn.Version = info.Version
 
+	// Login in order to obtail the Token
 	data := struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -102,6 +112,7 @@ func New(hostname, username, password string) (*Connector, error) {
 	}
 	conn.PersonID = login.Data.PersonID
 
+	// Get the LoginToken for further access
 	endpoint := fmt.Sprintf("persons/%d/logintoken", conn.PersonID)
 	result, err = conn.Get(endpoint, true)
 	if err != nil {
@@ -116,7 +127,7 @@ func New(hostname, username, password string) (*Connector, error) {
 	return conn, nil
 }
 
-func (conn *Connector) Get(endpoint string, needToken bool) ([]byte, error) {
+func (conn *Connector) Get(endpoint string, needAuth bool) ([]byte, error) {
 	url := fmt.Sprintf("https://%s/api/%s", conn.Hostname, endpoint)
 
 	request, err := http.NewRequest(http.MethodGet, url, nil)
@@ -125,8 +136,12 @@ func (conn *Connector) Get(endpoint string, needToken bool) ([]byte, error) {
 	}
 	request.Header.Set("Content-type", "application/json")
 
-	if needToken && conn.Token != "" {
-		request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
+	if needAuth {
+		if conn.Token != "" {
+			request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
+		} else if conn.Cookie != nil {
+			request.AddCookie(conn.Cookie)
+		}
 	}
 
 	response, err := conn.Client.Do(request)
@@ -152,8 +167,12 @@ func (conn *Connector) Post(endpoint string, data interface{}) ([]byte, error) {
 	}
 	request.Header.Set("Content-type", "application/json")
 
-	if endpoint != "login" && conn.Token != "" {
-		request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
+	if endpoint != "login" {
+		if conn.Token != "" {
+			request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
+		} else if conn.Cookie != nil {
+			request.AddCookie(conn.Cookie)
+		}
 	}
 
 	response, err := conn.Client.Do(request)
@@ -164,7 +183,32 @@ func (conn *Connector) Post(endpoint string, data interface{}) ([]byte, error) {
 
 	if len(response.Cookies()) > 0 {
 		conn.Cookie = response.Cookies()[0]
+		fmt.Printf("CT COOKIE '%+v'\n", conn.Cookie)
 	}
+
+	return ioutil.ReadAll(response.Body)
+}
+
+func (conn *Connector) Delete(endpoint string) ([]byte, error) {
+	url := fmt.Sprintf("https://%s/api/%s", conn.Hostname, endpoint)
+
+	request, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-type", "application/json")
+
+	if conn.Token != "" {
+		request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
+	} else if conn.Cookie != nil {
+		request.AddCookie(conn.Cookie)
+	}
+
+	response, err := conn.Client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
 
 	return ioutil.ReadAll(response.Body)
 }
