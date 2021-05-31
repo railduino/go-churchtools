@@ -15,54 +15,63 @@ const (
 	ROOT_CA_FILE = "/etc/ssl/certs/ca-certificates.crt"
 )
 
-type Connector struct {
-	Hostname string
-	Username string
-	Password string
+type User struct {
+	Hostname   string
+	Username   string
+	Password   string
+	PersonID   int
+	LoginToken string
+}
 
-	Client *http.Client
+type Connector struct {
+	User *User
 
 	Build   string
 	Version string
 
-	PersonID int
-	Cookie   *http.Cookie
-	Token    string
+	Client *http.Client
+	Cookie *http.Cookie
 }
 
 type MetaPerson struct {
-	ID   int    `json:"id"`
-	Name string `json:"-"`
+	ID   int
+	Name string
+}
+
+type MetaInfo struct {
+	CreatedPerson  MetaPerson
+	CreatedDate    string
+	ModifiedPerson MetaPerson
+	ModifiedDate   string
+}
+
+type Permissions struct {
+	CanEdit          bool
+	CanUseExpertMode bool
 }
 
 type InfoResult struct {
-	Build   string `json:"build"`
-	Version string `json:"version"`
+	Build   string
+	Version string
 }
 
 type LoginData struct {
-	Status   string `json:"status"`
-	Message  string `json:"message"`
-	PersonID int    `json:"personId"`
-	Location string `json:"location"`
+	Status   string
+	Message  string
+	PersonID int
+	Location string
 }
 
 type LoginResult struct {
-	Data LoginData `json:"data"`
+	Data LoginData
 }
 
 type LoginTokenResult struct {
-	Data string `json:"data"`
+	Data string
 }
 
-func New(hostname, username, password string) (*Connector, error) {
-	fmt.Printf("CT NEW 5\n")
-
-	conn := &Connector{
-		Hostname: hostname,
-		Username: username,
-		Password: password,
-	}
+func New(user *User) (*Connector, error) {
+	conn := &Connector{User: user}
 
 	// Setup the HTTPS client
 	rootCAPool := x509.NewCertPool()
@@ -73,9 +82,9 @@ func New(hostname, username, password string) (*Connector, error) {
 	rootCAPool.AppendCertsFromPEM(rootCA)
 
 	conn.Client = &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
-			IdleConnTimeout: 10 * time.Second,
+			IdleConnTimeout: 60 * time.Second,
 			TLSClientConfig: &tls.Config{
 				RootCAs: rootCAPool,
 			},
@@ -94,41 +103,51 @@ func New(hostname, username, password string) (*Connector, error) {
 	conn.Build = info.Build
 	conn.Version = info.Version
 
-	// Login in order to obtail the Token
-	data := struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}{
-		username,
-		password,
-	}
-	result, err = conn.Post("login", data)
-	if err != nil {
-		return nil, err
-	}
-	var login LoginResult
-	if err := json.Unmarshal(result, &login); err != nil {
-		return nil, err
-	}
-	conn.PersonID = login.Data.PersonID
+	// If PersonID is not known, try to login
+	if user.PersonID == 0 {
+		data := struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}{
+			user.Username,
+			user.Password,
+		}
 
-	// Get the LoginToken for further access
-	endpoint := fmt.Sprintf("persons/%d/logintoken", conn.PersonID)
-	result, err = conn.Get(endpoint, true)
-	if err != nil {
-		return nil, err
+		result, err = conn.Post("login", data)
+		if err != nil {
+			return nil, err
+		}
+
+		var login LoginResult
+		if err := json.Unmarshal(result, &login); err != nil {
+			return nil, err
+		}
+
+		user.PersonID = login.Data.PersonID
 	}
-	var token LoginTokenResult
-	if err := json.Unmarshal(result, &token); err != nil {
-		return nil, err
+
+	// If LoginToken is not known, try to obtain
+	if user.LoginToken == "" {
+		endpoint := fmt.Sprintf("persons/%d/logintoken", conn.User.PersonID)
+
+		result, err = conn.Get(endpoint, true)
+		if err != nil {
+			return nil, err
+		}
+
+		var token LoginTokenResult
+		if err := json.Unmarshal(result, &token); err != nil {
+			return nil, err
+		}
+
+		user.LoginToken = token.Data
 	}
-	conn.Token = token.Data
 
 	return conn, nil
 }
 
 func (conn *Connector) Get(endpoint string, needAuth bool) ([]byte, error) {
-	url := fmt.Sprintf("https://%s/api/%s", conn.Hostname, endpoint)
+	url := fmt.Sprintf("https://%s/api/%s", conn.User.Hostname, endpoint)
 
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -137,8 +156,8 @@ func (conn *Connector) Get(endpoint string, needAuth bool) ([]byte, error) {
 	request.Header.Set("Content-type", "application/json")
 
 	if needAuth {
-		if conn.Token != "" {
-			request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
+		if conn.User.LoginToken != "" {
+			request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.User.LoginToken))
 		} else if conn.Cookie != nil {
 			request.AddCookie(conn.Cookie)
 		}
@@ -154,7 +173,7 @@ func (conn *Connector) Get(endpoint string, needAuth bool) ([]byte, error) {
 }
 
 func (conn *Connector) Post(endpoint string, data interface{}) ([]byte, error) {
-	url := fmt.Sprintf("https://%s/api/%s", conn.Hostname, endpoint)
+	url := fmt.Sprintf("https://%s/api/%s", conn.User.Hostname, endpoint)
 
 	body, err := json.Marshal(data)
 	if err != nil {
@@ -168,8 +187,8 @@ func (conn *Connector) Post(endpoint string, data interface{}) ([]byte, error) {
 	request.Header.Set("Content-type", "application/json")
 
 	if endpoint != "login" {
-		if conn.Token != "" {
-			request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
+		if conn.User.LoginToken != "" {
+			request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.User.LoginToken))
 		} else if conn.Cookie != nil {
 			request.AddCookie(conn.Cookie)
 		}
@@ -183,14 +202,13 @@ func (conn *Connector) Post(endpoint string, data interface{}) ([]byte, error) {
 
 	if len(response.Cookies()) > 0 {
 		conn.Cookie = response.Cookies()[0]
-		fmt.Printf("CT COOKIE '%+v'\n", conn.Cookie)
 	}
 
 	return ioutil.ReadAll(response.Body)
 }
 
 func (conn *Connector) Delete(endpoint string) ([]byte, error) {
-	url := fmt.Sprintf("https://%s/api/%s", conn.Hostname, endpoint)
+	url := fmt.Sprintf("https://%s/api/%s", conn.User.Hostname, endpoint)
 
 	request, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
@@ -198,8 +216,8 @@ func (conn *Connector) Delete(endpoint string) ([]byte, error) {
 	}
 	request.Header.Set("Content-type", "application/json")
 
-	if conn.Token != "" {
-		request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
+	if conn.User.LoginToken != "" {
+		request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.User.LoginToken))
 	} else if conn.Cookie != nil {
 		request.AddCookie(conn.Cookie)
 	}

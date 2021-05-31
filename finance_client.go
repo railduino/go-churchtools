@@ -2,38 +2,45 @@ package churchtools
 
 import (
 	"encoding/json"
-	"fmt"
+	//"fmt"
 )
 
-type FinanceClientMeta struct {
-	CreatedPerson  MetaPerson `json:"createdPerson"`
-	CreatedDate    string     `json:"createdDate"`
-	ModifiedPerson MetaPerson `json:"modifiedPerson"`
-	ModifiedDate   string     `json:"modifiedDate"`
-}
-
 type FinanceClient struct {
-	ID      int               `json:"id"`
-	Name    string            `json:"name"`
-	SortKey int               `json:"sortKey"`
-	Meta    FinanceClientMeta `json:"meta"`
+	ID         int
+	Name       string
+	Street     string
+	PostalCode string
+	City       string
+	Phone      string
+	SortKey    int
+	Meta       MetaInfo
 }
 
 type FinanceGetClientsResult struct {
-	Data []FinanceClient `json:"data"`
+	Data []FinanceClient
 }
 
+var (
+	FinanceClients   []FinanceClient
+	FinanceClientMap = make(map[int]*FinanceClient)
+)
+
 func (conn *Connector) FinanceGetClients() ([]FinanceClient, error) {
-	result, err := conn.Get("finance/clients", true)
+	content, err := conn.Get("finance/clients", true)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("FinanceGetClients '%s'\n", string(result))
+	//fmt.Printf("FinanceGetClients '%s'\n", string(content))
 
-	var clients FinanceGetClientsResult
-	if err := json.Unmarshal(result, &clients); err != nil {
+	var result FinanceGetClientsResult
+	if err := json.Unmarshal(content, &result); err != nil {
 		return nil, err
 	}
 
-	return clients.Data, nil
+	for _, client := range result.Data {
+		FinanceClients = append(FinanceClients, client)
+		FinanceClientMap[client.ID] = &client
+	}
+
+	return FinanceClients, nil
 }
