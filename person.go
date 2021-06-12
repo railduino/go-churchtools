@@ -8,7 +8,7 @@ import (
 type Email struct {
 	Email          string
 	IsDefault      bool
-	ContactLabelId int
+	ContactLabelID int
 }
 
 type DomainAttributes struct {
@@ -27,8 +27,8 @@ type Relative struct {
 	DomainAttributes DomainAttributes
 }
 
-type Relation struct {
-	RelationshipTypeId   int
+type Relationship struct {
+	RelationshipTypeID   int
 	RelationshipName     string
 	DegreeOfRelationship string
 	Relative             Relative
@@ -58,32 +58,31 @@ type Person struct {
 	FamilyImageUrl             string
 	Email                      string
 	Emails                     []Email
-	familyStatusId             int
-	weddingDate                string
-	statusId                   int
-	dateOfBaptism              string
-	canChat                    bool
-	invitationStatus           string
-	chatActive                 bool
+	FamilyStatusID             int
+	WeddingDate                string
+	StatusID                   int
+	DateOfBaptism              string
+	CanChat                    bool
+	InvitationStatus           string
+	ChatActive                 bool
 	Meta                       MetaInfo
-	isArchived                 bool
-	Relations                  []Relation `json:"-"`
+	IsArchived                 bool
 	// TODO LatitudeLoose
 	// TODO LongitudeLoose
-	// TODO privacyPolicyAgreement
+	// TODO PrivacyPolicyAgreement
 }
 
 type PersonsResult struct {
 	Data []Person
 }
 
-var (
-	Persons       []Person
-	PersonIdMap   = make(map[int]*Person)
-	PersonGuidMap = make(map[string]*Person)
-)
+type RelationshipsResult struct {
+	Data []Relationship
+}
 
 func (conn *Connector) GetPersons() ([]Person, error) {
+	var person_list []Person
+
 	for page := 1; ; page++ {
 		url := fmt.Sprintf("persons?page=%d&limit=100", page)
 		content, err := conn.Get(url, true)
@@ -101,11 +100,24 @@ func (conn *Connector) GetPersons() ([]Person, error) {
 		}
 
 		for _, person := range result.Data {
-			Persons = append(Persons, person)
-			PersonIdMap[person.ID] = &person
-			PersonGuidMap[person.GUID] = &person
+			person_list = append(person_list, person)
 		}
 	}
 
-	return Persons, nil
+	return person_list, nil
+}
+
+func (conn *Connector) GetRelationships(id int) ([]Relationship, error) {
+	url := fmt.Sprintf("persons/%d/relationships", id)
+	content, err := conn.Get(url, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var result RelationshipsResult
+	if err := json.Unmarshal(content, &result); err != nil {
+		return nil, err
+	}
+
+	return result.Data, nil
 }

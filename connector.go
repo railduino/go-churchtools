@@ -44,6 +44,7 @@ type MetaInfo struct {
 type Permissions struct {
 	CanEdit          bool
 	CanUseExpertMode bool
+	AllowPosting     bool
 }
 
 type InfoResult struct {

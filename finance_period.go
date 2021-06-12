@@ -40,7 +40,7 @@ func (conn *Connector) FinanceGetPeriods() ([]FinancePeriod, error) {
 	for _, period := range result.Data {
 		period.Client, ok = FinanceClientMap[period.ClientID]
 		if !ok {
-			return nil, fmt.Errorf("invalid clientId %d in FinancePeriod", period.ClientID)
+			return nil, fmt.Errorf("invalid clientId %d in FinancePeriod %d", period.ClientID, period.ID)
 		}
 		FinancePeriods = append(FinancePeriods, period)
 		FinancePeriodMap[period.ID] = &period
