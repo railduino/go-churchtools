@@ -15,10 +15,14 @@ const (
 	ROOT_CA_FILE = "/etc/ssl/certs/ca-certificates.crt"
 )
 
+type Credentials struct {
+	Hostname string
+	Username string
+	Password string
+}
+
 type Connector struct {
-	Hostname   string
-	Username   string
-	Password   string
+	Credentials
 	PersonID   int
 	LoginToken string
 
@@ -67,12 +71,8 @@ type LoginTokenResult struct {
 	Data string
 }
 
-func Login(hostname, username, password string) (*Connector, error) {
-	conn := &Connector{
-		Hostname: hostname,
-		Username: username,
-		Password: password,
-	}
+func (cred Credentials) Login() (*Connector, error) {
+	conn := &Connector{Credentials: cred}
 
 	// Setup the HTTPS client
 	rootCAPool := x509.NewCertPool()
