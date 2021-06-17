@@ -15,16 +15,16 @@ const (
 	ROOT_CA_FILE = "/etc/ssl/certs/ca-certificates.crt"
 )
 
-type Credentials struct {
+type User struct {
 	Hostname string
 	Username string
 	Password string
+	Token    string
 }
 
 type Connector struct {
-	Credentials
-	PersonID   int
-	LoginToken string
+	User
+	PersonID int
 
 	Build   string
 	Version string
@@ -71,8 +71,8 @@ type LoginTokenResult struct {
 	Data string
 }
 
-func (cred Credentials) Login() (*Connector, error) {
-	conn := &Connector{Credentials: cred}
+func (user User) Login() (*Connector, error) {
+	conn := &Connector{User: user}
 
 	// Setup the HTTPS client
 	rootCAPool := x509.NewCertPool()
@@ -124,7 +124,7 @@ func (cred Credentials) Login() (*Connector, error) {
 	conn.PersonID = login.Data.PersonID
 
 	// If LoginToken is not known, try to obtain
-	if conn.LoginToken == "" {
+	if conn.Token == "" {
 		endpoint := fmt.Sprintf("persons/%d/logintoken", conn.PersonID)
 
 		result, err = conn.Get(endpoint, true)
@@ -137,7 +137,7 @@ func (cred Credentials) Login() (*Connector, error) {
 			return nil, err
 		}
 
-		conn.LoginToken = token.Data
+		conn.Token = token.Data
 	}
 
 	return conn, nil
@@ -153,8 +153,8 @@ func (conn *Connector) Get(endpoint string, needAuth bool) ([]byte, error) {
 	request.Header.Set("Content-type", "application/json")
 
 	if needAuth {
-		if conn.LoginToken != "" {
-			request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.LoginToken))
+		if conn.Token != "" {
+			request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
 		} else if conn.Cookie != nil {
 			request.AddCookie(conn.Cookie)
 		}
@@ -184,8 +184,8 @@ func (conn *Connector) Post(endpoint string, data interface{}) ([]byte, error) {
 	request.Header.Set("Content-type", "application/json")
 
 	if endpoint != "login" {
-		if conn.LoginToken != "" {
-			request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.LoginToken))
+		if conn.Token != "" {
+			request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
 		} else if conn.Cookie != nil {
 			request.AddCookie(conn.Cookie)
 		}
@@ -213,8 +213,8 @@ func (conn *Connector) Delete(endpoint string) ([]byte, error) {
 	}
 	request.Header.Set("Content-type", "application/json")
 
-	if conn.LoginToken != "" {
-		request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.LoginToken))
+	if conn.Token != "" {
+		request.Header.Set("Authorization", fmt.Sprintf("Login %s", conn.Token))
 	} else if conn.Cookie != nil {
 		request.AddCookie(conn.Cookie)
 	}
