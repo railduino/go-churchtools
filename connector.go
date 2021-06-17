@@ -19,12 +19,12 @@ type User struct {
 	Hostname string
 	Username string
 	Password string
-	Token    string
 }
 
 type Connector struct {
 	User
 	PersonID int
+	Token    string
 
 	Build   string
 	Version string
@@ -73,6 +73,13 @@ type LoginTokenResult struct {
 
 func (user User) Login() (*Connector, error) {
 	conn := &Connector{User: user}
+
+	if user.Hostname == "" {
+		return nil, fmt.Errorf("missing Hostname")
+	}
+	if user.Username == "" {
+		return nil, fmt.Errorf("missing Username")
+	}
 
 	// Setup the HTTPS client
 	rootCAPool := x509.NewCertPool()

@@ -72,7 +72,7 @@ type Person struct {
 	// TODO PrivacyPolicyAgreement
 }
 
-type PersonsResult struct {
+type PeopleResult struct {
 	Data []Person
 }
 
@@ -80,7 +80,7 @@ type RelationshipsResult struct {
 	Data []Relationship
 }
 
-func (conn *Connector) GetPersons() ([]Person, error) {
+func (conn *Connector) GetPeople() ([]Person, error) {
 	var person_list []Person
 
 	for page := 1; ; page++ {
@@ -90,7 +90,7 @@ func (conn *Connector) GetPersons() ([]Person, error) {
 			return nil, err
 		}
 
-		var result PersonsResult
+		var result PeopleResult
 		if err := json.Unmarshal(content, &result); err != nil {
 			return nil, err
 		}
